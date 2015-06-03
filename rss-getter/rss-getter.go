@@ -8,19 +8,21 @@ import (
 	"os"
 )
 
+const maxFeedItems = 1000
+
 var maxFeeds int
 var commandLineFeedURL string
-var FeedURLFilePath string
+var feedURLFilePath string
 
 func init() {
 	flag.StringVar(&commandLineFeedURL, "feed", "", "the url for the RSS or Atom feed to be fetched")
-	flag.StringVar(&FeedURLFilePath, "file", "", "the filepath to a line separated file containing the urls of RSS feeds desired to be fetched")
+	flag.StringVar(&feedURLFilePath, "file", "", "the filepath to a line separated file containing the urls of RSS feeds desired to be fetched")
 	flag.IntVar(&maxFeeds, "limit", 10, "the maximum number of rss feeds allowed to be fetched by this program")
 }
 
 func main() {
 	flag.Parse()
-	slice := compileFeedURLs()
+    slice := compileFeedURLs(commandLineFeedURL, feedURLFilePath, maxFeeds)
 	if len(slice) != 0 {
 		for index := 0; index < len(slice); index++ {
 			if slice[index] != "" && slice[index] != " " {
@@ -37,19 +39,38 @@ func main() {
 	}
 }
 
-func compileFeedURLs() []string {
-	feedURLSlice := make([]string, maxFeeds)
-	if commandLineFeedURL != "" {
-		feedURLSlice = append(feedURLSlice, commandLineFeedURL)
+func GetFeeds(feedURLs []string) []*rss.Item {
+    feedItems := make([]*rss.Item, maxFeedItems)
+	if len(feedURLs) != 0 {
+		for index := 0; index < len(feedURLs); index++ {
+			if feedURLs[index] != "" && feedURLs[index] != " " {
+				feed, err := rss.Fetch(feedURLs[index])
+				if err != nil {
+					fmt.Printf("%s", err)
+				} else {
+                    feedItems = append(feedItems, feed.Items...)
+				}
+			}
+		}
+	} else {
+		fmt.Println("No feedURL given")
 	}
-	if FeedURLFilePath != "" {
-		feedURLSlice = append(feedURLSlice, getLinesFromFile(FeedURLFilePath)...)
+    return feedItems
+}
+
+func compileFeedURLs(givenFeedURL string, feedFilePath string, limit int ) []string {
+	feedURLSlice := make([]string, limit)
+	if givenFeedURL != "" {
+		feedURLSlice = append(feedURLSlice, givenFeedURL)
+	}
+	if feedFilePath != "" {
+		feedURLSlice = append(feedURLSlice, GetURLsFromFile(feedFilePath, limit)...)
 	}
 	return feedURLSlice
 }
 
-func getLinesFromFile(fileName string) []string {
-	slice := make([]string, maxFeeds-1)
+func GetURLsFromFile(fileName string, limit int) []string {
+	slice := make([]string, limit-1)
 
 	file, err := os.Open(fileName)
 
@@ -65,7 +86,7 @@ func getLinesFromFile(fileName string) []string {
 	scanner.Split(bufio.ScanLines)
 
 	for scanner.Scan() {
-		if len(slice) < maxFeeds {
+		if len(slice) < limit {
 			line := scanner.Text()
 			if line != "" {
 				slice = append(slice, line)
